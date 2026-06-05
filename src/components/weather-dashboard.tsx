@@ -64,6 +64,42 @@ function formatGeneratedTime(timestamp: string, timezone: string): string {
   });
 }
 
+function formatSummaryLine(summary: string, aiEnabled: boolean): string {
+  if (!aiEnabled) {
+    return "AI brief paused.";
+  }
+
+  const firstSentence = summary.split(/(?<=[.!?])\s+/)[0]?.trim();
+  if (!firstSentence) {
+    return "AI brief active.";
+  }
+
+  const normalized = firstSentence.replace(/[.!?]+$/, "").trim();
+  if (normalized.length === 0) {
+    return "AI brief active.";
+  }
+
+  return normalized.length > 52 ? `${normalized.slice(0, 49).trimEnd()}...` : `${normalized}.`;
+}
+
+function formatNarrativeTime(value: string): string {
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match) {
+    return value;
+  }
+
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const normalizedHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${normalizedHour}:${minute} ${suffix}`;
+}
+
+function includesSearch(preset: LocationPreset, value: string): boolean {
+  const searchable = `${preset.label} ${preset.region} ${preset.country}`.toLowerCase();
+  return searchable.includes(value);
+}
+
 function buildChart(hourly: WeatherReport["hourly"]): { line: string; area: string } {
   const points = hourly.slice(0, 8);
   if (points.length === 0) {
@@ -116,15 +152,49 @@ export function WeatherDashboard({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationNote, setLocationNote] = useState<string | null>(null);
+  const [citySearch, setCitySearch] = useState("");
   const deferredQuery = useDeferredValue(query);
   const firstRender = useRef(true);
   const lastSyncedUrl = useRef<string | null>(null);
 
   const chart = useMemo(() => buildChart(report.hourly), [report.hourly]);
+  const featuredPresets = presets.slice(0, 5);
   const activePreset = presets.find(
     (preset) =>
       Math.abs(preset.lat - query.lat) < 0.01 && Math.abs(preset.lon - query.lon) < 0.01,
   );
+  const normalizedSearch = citySearch.trim().toLowerCase();
+  const searchResults =
+    normalizedSearch.length === 0
+      ? []
+      : presets
+          .filter((preset) => includesSearch(preset, normalizedSearch))
+          .slice(0, 6);
+
+  const wettestHour = report.hourly.reduce((best, hour) =>
+    hour.precipitationChance > best.precipitationChance ? hour : best,
+  );
+  const driestHour = report.hourly.reduce((best, hour) =>
+    hour.precipitationChance < best.precipitationChance ? hour : best,
+  );
+  const headsUpTone =
+    report.source === "mock"
+      ? "Fallback"
+      : wettestHour.precipitationChance >= 65
+        ? "Watch"
+        : wettestHour.precipitationChance >= 35
+          ? "Mixed"
+          : "Steady";
+  const headsUpMessage =
+    wettestHour.precipitationChance >= 65
+      ? `Rain builds most clearly around ${formatNarrativeTime(wettestHour.time)}.`
+      : wettestHour.precipitationChance >= 35
+        ? `Rain stays in play, peaking near ${formatNarrativeTime(wettestHour.time)}.`
+        : "No major rain spike is showing in the next eight checkpoints.";
+  const headsUpSupport =
+    driestHour.precipitationChance < wettestHour.precipitationChance
+      ? `Best dry window: around ${formatNarrativeTime(driestHour.time)}.`
+      : "Conditions stay broadly steady through the current window.";
 
   const refreshWeather = useEffectEvent(async (nextQuery: WeatherQuery) => {
     setIsLoading(true);
@@ -175,6 +245,7 @@ export function WeatherDashboard({
 
   const handlePreset = (preset: LocationPreset): void => {
     setLocationNote(null);
+    setCitySearch("");
     startTransition(() => {
       const nextQuery: WeatherQuery = {
         ...query,
@@ -269,22 +340,22 @@ export function WeatherDashboard({
     {
       label: "Feels like",
       value: formatTemperature(report.current.apparentTemperature, report.units),
-      detail: "Human comfort index after humidity and airflow adjustments.",
+      detail: "Comfort estimate.",
     },
     {
       label: "Humidity",
       value: `${report.current.humidity}%`,
-      detail: "Useful for planning commutes, fieldwork, and indoor comfort.",
+      detail: "Useful for comfort and planning.",
     },
     {
       label: "Pressure",
       value: `${Math.round(report.current.pressure)} ${report.units === "metric" ? "mb" : "in"}`,
-      detail: "Pressure shifts often signal incoming cloud buildup or clearing.",
+      detail: "Signals buildup or clearing.",
     },
     {
       label: "Visibility",
       value: formatVisibility(report.current.visibility, report.units),
-      detail: "Road and outdoor visibility estimate for the active weather window.",
+      detail: "Road and outdoor visibility.",
     },
   ];
 
@@ -297,22 +368,22 @@ export function WeatherDashboard({
     {
       label: "Data source",
       value: report.source === "live" ? "Live Weather-AI" : "Demo fallback",
-      detail: "Server-side forecast feed",
+      detail: "Server-side feed",
     },
     {
       label: "Forecast window",
       value: `${query.days} days`,
-      detail: "Daily runway currently loaded",
+      detail: "Current range",
     },
     {
       label: "Timezone",
       value: report.location.timezone,
-      detail: "Local context for the briefing",
+      detail: "Forecast timezone",
     },
     {
       label: "Narrative layer",
       value: query.ai ? "AI enabled" : "AI paused",
-      detail: "Metrics remain live in both modes",
+      detail: "Metrics stay live",
     },
   ];
 
@@ -329,7 +400,7 @@ export function WeatherDashboard({
           </div>
 
           <div className={styles.sourceBadge}>
-            {report.source === "live" ? "Live Weather-AI feed" : "Demo-safe mode"}
+            {report.source === "live" ? "Live Weather-AI feed" : "Live forecast temporarily rate-limited"}
             <span className={styles.sourceDetail}>{report.sourceDetail}</span>
           </div>
         </div>
@@ -339,8 +410,41 @@ export function WeatherDashboard({
             <div className={styles.controlPanel}>
               <p className={styles.panelLabel}>Forecast controls</p>
 
+              <div className={styles.searchBlock}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Quick city search</span>
+                  <input
+                    className={styles.input}
+                    type="search"
+                    placeholder="Search city, region, or country"
+                    value={citySearch}
+                    onChange={(event) => setCitySearch(event.target.value)}
+                  />
+                </label>
+
+                {searchResults.length > 0 ? (
+                  <div className={styles.searchResults}>
+                    {searchResults.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={styles.searchResultButton}
+                        onClick={() => handlePreset(preset)}
+                      >
+                        <span>{preset.label}</span>
+                        <span className={styles.searchResultMeta}>
+                          {preset.region}, {preset.country}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : normalizedSearch.length > 0 ? (
+                  <div className={styles.searchEmpty}>No matching city in the briefing catalog.</div>
+                ) : null}
+              </div>
+
               <div className={styles.presetRow}>
-                {presets.map((preset) => {
+                {featuredPresets.map((preset) => {
                   const isActive = activePreset?.id === preset.id;
                   return (
                     <button
@@ -418,7 +522,7 @@ export function WeatherDashboard({
                 <div>
                   <p className={styles.panelLabel}>Briefing status</p>
                   <p className={styles.sectionCaption}>
-                    A compact status strip so the command surface feels informative all the way through.
+                    Live status for the current brief.
                   </p>
                 </div>
               </div>
@@ -464,28 +568,37 @@ export function WeatherDashboard({
             </div>
 
             <p className={styles.condition}>{report.current.condition}</p>
-            <p className={styles.summary}>{report.summary}</p>
+            <p className={styles.summary}>{formatSummaryLine(report.summary, query.ai)}</p>
+
+            <div className={styles.headsUpCard}>
+              <div className={styles.headsUpHeader}>
+                <p className={styles.metricTitle}>Heads-up</p>
+                <span className={styles.headsUpTone}>{headsUpTone}</span>
+              </div>
+              <p className={styles.headsUpBody}>{headsUpMessage}</p>
+              <p className={styles.headsUpMeta}>{headsUpSupport}</p>
+            </div>
 
             <div className={styles.metricGrid}>
               <div className={styles.metricCard}>
                 <p className={styles.metricTitle}>Rain chance</p>
                 <p className={styles.metricValue}>{formatChance(report.current.precipitationChance)}</p>
-                <p className={styles.metricDetail}>Near-term precipitation confidence.</p>
+                <p className={styles.metricDetail}>Near-term rain signal.</p>
               </div>
               <div className={styles.metricCard}>
                 <p className={styles.metricTitle}>Wind</p>
                 <p className={styles.metricValue}>{formatWind(report.current.windSpeed, report.units)}</p>
-                <p className={styles.metricDetail}>Useful for travel and outdoor activity.</p>
+                <p className={styles.metricDetail}>Travel and outdoor cue.</p>
               </div>
               <div className={styles.metricCard}>
                 <p className={styles.metricTitle}>Sunrise</p>
                 <p className={styles.metricValue}>{report.current.sunrise}</p>
-                <p className={styles.metricDetail}>Morning light window.</p>
+                <p className={styles.metricDetail}>First light.</p>
               </div>
               <div className={styles.metricCard}>
                 <p className={styles.metricTitle}>Sunset</p>
                 <p className={styles.metricValue}>{report.current.sunset}</p>
-                <p className={styles.metricDetail}>Evening wrap-up for the day.</p>
+                <p className={styles.metricDetail}>Last light.</p>
               </div>
             </div>
           </div>
@@ -498,7 +611,7 @@ export function WeatherDashboard({
             <div>
               <h3 className={styles.sectionTitle}>Hourly temperature pulse</h3>
               <p className={styles.sectionCaption}>
-                The next eight checkpoints show how the thermal curve and rain risk stack up across the day.
+                The next eight checkpoints across the day.
               </p>
             </div>
             <div className={styles.footnote}>
@@ -552,7 +665,7 @@ export function WeatherDashboard({
             <div>
               <h3 className={styles.sectionTitle}>Operational insights</h3>
               <p className={styles.sectionCaption}>
-                Compact signals designed to feel useful in a real product, not just visually impressive.
+                Compact signals for the current pattern.
               </p>
             </div>
           </div>
@@ -582,7 +695,7 @@ export function WeatherDashboard({
             <div>
               <h3 className={styles.sectionTitle}>Seven-day runway</h3>
               <p className={styles.sectionCaption}>
-                A compact forecast strip with temperature spread and precipitation posture for each day.
+                Temperature spread and rain posture by day.
               </p>
             </div>
           </div>
@@ -623,7 +736,7 @@ export function WeatherDashboard({
             <div>
               <h3 className={styles.sectionTitle}>Highlights</h3>
               <p className={styles.sectionCaption}>
-                Secondary conditions that make the dashboard feel complete and decision-ready.
+                Secondary conditions at a glance.
               </p>
             </div>
           </div>
@@ -650,7 +763,7 @@ export function WeatherDashboard({
             <div>
               <h3 className={styles.sectionTitle}>Runtime notes</h3>
               <p className={styles.sectionCaption}>
-                Helpful feedback while switching coordinates, toggling units, or testing browser geolocation.
+                Feedback while switching location or settings.
               </p>
             </div>
           </div>
