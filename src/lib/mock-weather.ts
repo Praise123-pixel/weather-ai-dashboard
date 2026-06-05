@@ -228,6 +228,6 @@ export function buildDefaultQuery(): WeatherQuery {
 }
 
 export function formatDayLabel(date: string): string {
-  const parsed = new Date(`${date}T00:00:00`);
-  return DAY_NAMES[parsed.getDay()] ?? "Day";
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return DAY_NAMES[parsed.getUTCDay()] ?? "Day";
 }
