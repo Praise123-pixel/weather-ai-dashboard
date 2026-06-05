@@ -1,5 +1,6 @@
 import { buildWeatherInsights } from "@/lib/weather-insights";
 import { getMockWeatherReport } from "@/lib/mock-weather";
+import { toWeatherSearchParams } from "@/lib/weather-query";
 import type {
   DailyPoint,
   HourlyPoint,
@@ -9,6 +10,10 @@ import type {
 } from "@/lib/weather-types";
 
 const API_BASE = process.env.WEATHER_AI_BASE_URL ?? "https://api.weather-ai.co";
+const LIVE_CACHE_TTL_MS = 3 * 60 * 1000;
+const STALE_CACHE_TTL_MS = 30 * 60 * 1000;
+const FETCH_RETRY_DELAYS_MS = [300, 900];
+const liveReportCache = new Map<string, { report: WeatherReport; cachedAt: number }>();
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -191,7 +196,7 @@ function getDailyTemperature(
   return undefined;
 }
 
-function formatHour(value: string): string {
+function formatHour(value: string, timezone: string): string {
   if (/^\d{2}:\d{2}$/.test(value)) {
     return value;
   }
@@ -206,7 +211,68 @@ function formatHour(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: timezone,
   });
+}
+
+function buildCacheKey(query: WeatherQuery): string {
+  return toWeatherSearchParams(query).toString();
+}
+
+function readCachedLiveReport(
+  key: string,
+  maxAgeMs: number,
+): { report: WeatherReport; cachedAt: number } | undefined {
+  const entry = liveReportCache.get(key);
+  if (!entry) {
+    return undefined;
+  }
+
+  if (Date.now() - entry.cachedAt > maxAgeMs) {
+    return undefined;
+  }
+
+  return entry;
+}
+
+function writeCachedLiveReport(key: string, report: WeatherReport): void {
+  liveReportCache.set(key, {
+    report,
+    cachedAt: Date.now(),
+  });
+}
+
+async function pause(delayMs: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+}
+
+async function fetchLiveWeatherPayload(query: WeatherQuery, apiKey: string): Promise<unknown> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= FETCH_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE}/v1/weather?${toWeatherSearchParams(query).toString()}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Weather-AI returned ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Unknown Weather-AI fetch error");
+      if (attempt < FETCH_RETRY_DELAYS_MS.length) {
+        await pause(FETCH_RETRY_DELAYS_MS[attempt] ?? 300);
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Unknown Weather-AI fetch error");
 }
 
 function extractDailySource(root: Record<string, unknown>): unknown[] {
@@ -330,6 +396,12 @@ function normalizeWeatherPayload(
   const hourly = fallback.hourly.map((entry, index) =>
     normalizeHourlyPoint(hourlySource[index], entry, query.units),
   );
+  const locationTimezone =
+    firstString(
+      pickValue(locationRecord, ["tz_id", "timezone"]),
+      query.timezone,
+      fallback.location.timezone,
+    ) ?? fallback.location.timezone;
 
   const report: WeatherReport = {
     source: "live",
@@ -369,12 +441,7 @@ function normalizeWeatherPayload(
           pickValue(locationRecord, ["lon", "longitude"]),
           query.lon,
         ) ?? query.lon,
-      timezone:
-        firstString(
-          pickValue(locationRecord, ["tz_id", "timezone"]),
-          query.timezone,
-          fallback.location.timezone,
-        ) ?? fallback.location.timezone,
+      timezone: locationTimezone,
     },
     current: {
       temperature: getTemperature(currentRecord, query.units) ?? fallback.current.temperature,
@@ -430,7 +497,7 @@ function normalizeWeatherPayload(
           fallback.current.sunset,
         ) ?? fallback.current.sunset,
     },
-    hourly: hourly.map((entry) => ({ ...entry, time: formatHour(entry.time) })),
+    hourly: hourly.map((entry) => ({ ...entry, time: formatHour(entry.time, locationTimezone) })),
     daily,
     insights: [],
   };
@@ -439,42 +506,36 @@ function normalizeWeatherPayload(
   return report;
 }
 
-function toQueryString(query: WeatherQuery): string {
-  const params = new URLSearchParams({
-    lat: query.lat.toString(),
-    lon: query.lon.toString(),
-    days: query.days.toString(),
-    units: query.units,
-    ai: String(query.ai),
-  });
-
-  return params.toString();
-}
-
 export async function getWeatherReport(query: WeatherQuery): Promise<WeatherReport> {
   const fallback = getMockWeatherReport(query);
   const apiKey = process.env.WEATHER_AI_API_KEY;
+  const cacheKey = buildCacheKey(query);
+  const freshCached = readCachedLiveReport(cacheKey, LIVE_CACHE_TTL_MS);
+
+  if (freshCached) {
+    return freshCached.report;
+  }
 
   if (!apiKey) {
     return fallback;
   }
 
   try {
-    const response = await fetch(`${API_BASE}/v1/weather?${toQueryString(query)}`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Weather-AI returned ${response.status}`);
-    }
-
-    const payload = await response.json();
-    return normalizeWeatherPayload(payload, query, fallback);
+    const payload = await fetchLiveWeatherPayload(query, apiKey);
+    const liveReport = normalizeWeatherPayload(payload, query, fallback);
+    writeCachedLiveReport(cacheKey, liveReport);
+    return liveReport;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Weather-AI fetch error";
+    const staleCached = readCachedLiveReport(cacheKey, STALE_CACHE_TTL_MS);
+    if (staleCached) {
+      return {
+        ...staleCached.report,
+        source: "live",
+        sourceDetail: `${message}. Showing the latest cached live briefing instead of switching to demo data.`,
+      };
+    }
+
     return {
       ...fallback,
       sourceDetail: `${message}. Falling back to seeded demo data so the dashboard stays fully interactive.`,
