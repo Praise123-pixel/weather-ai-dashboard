@@ -34,7 +34,7 @@ export function buildWeatherInsights(
     {
       title: "Rain window",
       value: `${wettestHour.precipitationChance}%`,
-      detail: `Highest rain signal arrives around ${wettestHour.time}.`,
+      detail: `${wettestHour.time} is the wettest point.`,
       tone: rainTone,
     },
     {
@@ -42,7 +42,7 @@ export function buildWeatherInsights(
       value: report.units === "metric"
         ? `${Math.round(report.current.windSpeed)} km/h`
         : `${Math.round(report.current.windSpeed)} mph`,
-      detail: "Useful for outdoor planning, transit, and field operations.",
+      detail: "Outdoor and travel cue.",
       tone: windTone,
     },
     {
@@ -50,7 +50,7 @@ export function buildWeatherInsights(
       value: report.units === "metric"
         ? `${Math.round(swing)} C`
         : `${Math.round(swing)} F`,
-      detail: `Expect the widest spread between ${coolestDay.date} and ${warmestDay.date}.`,
+      detail: `Widest spread runs ${coolestDay.date} to ${warmestDay.date}.`,
       tone: swingTone,
     },
   ];
