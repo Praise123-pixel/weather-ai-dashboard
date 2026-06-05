@@ -9,8 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import styles from "./weather-dashboard.module.css";
 import { formatDayLabel } from "@/lib/mock-weather";
+import { toWeatherSearchParams } from "@/lib/weather-query";
 import type {
   LocationPreset,
   Units,
@@ -47,6 +49,19 @@ function formatChance(value: number): string {
 
 function formatCoordinates(value: number): string {
   return value.toFixed(4);
+}
+
+function formatGeneratedTime(timestamp: string, timezone: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return "--:--";
+  }
+
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
 }
 
 function buildChart(hourly: WeatherReport["hourly"]): { line: string; area: string } {
@@ -93,6 +108,8 @@ export function WeatherDashboard({
   initialReport,
   presets,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = useState<WeatherQuery>(initialQuery);
   const [report, setReport] = useState<WeatherReport>(initialReport);
   const [draft, setDraft] = useState<CoordinatesDraft>(makeDraft(initialQuery));
@@ -101,6 +118,7 @@ export function WeatherDashboard({
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
   const firstRender = useRef(true);
+  const lastSyncedUrl = useRef<string | null>(null);
 
   const chart = useMemo(() => buildChart(report.hourly), [report.hourly]);
   const activePreset = presets.find(
@@ -111,16 +129,7 @@ export function WeatherDashboard({
   const refreshWeather = useEffectEvent(async (nextQuery: WeatherQuery) => {
     setIsLoading(true);
     setError(null);
-
-    const params = new URLSearchParams({
-      lat: nextQuery.lat.toString(),
-      lon: nextQuery.lon.toString(),
-      days: nextQuery.days.toString(),
-      units: nextQuery.units,
-      ai: String(nextQuery.ai),
-      label: nextQuery.label ?? "",
-      timezone: nextQuery.timezone ?? "",
-    });
+    const params = toWeatherSearchParams(nextQuery);
 
     try {
       const response = await fetch(`/api/weather?${params.toString()}`, {
@@ -152,6 +161,17 @@ export function WeatherDashboard({
 
     void refreshWeather(deferredQuery);
   }, [deferredQuery]);
+
+  useEffect(() => {
+    const search = toWeatherSearchParams(query).toString();
+    const nextUrl = search ? `${pathname}?${search}` : pathname;
+    if (lastSyncedUrl.current === nextUrl) {
+      return;
+    }
+
+    lastSyncedUrl.current = nextUrl;
+    router.replace(nextUrl, { scroll: false });
+  }, [pathname, query, router]);
 
   const handlePreset = (preset: LocationPreset): void => {
     setLocationNote(null);
@@ -482,10 +502,7 @@ export function WeatherDashboard({
               </p>
             </div>
             <div className={styles.footnote}>
-              Updated {new Date(report.generatedAt).toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              Updated {formatGeneratedTime(report.generatedAt, report.location.timezone)}
             </div>
           </div>
 
