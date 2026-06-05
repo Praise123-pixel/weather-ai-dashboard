@@ -389,6 +389,9 @@ function normalizeWeatherPayload(
   const conditionRecord = asRecord(currentRecord?.condition);
   const dailySource = extractDailySource(root);
   const hourlySource = extractHourlySource(root, dailySource);
+  const firstDailyRecord = asRecord(dailySource[0]);
+  const firstDailyDayRecord = asRecord(firstDailyRecord?.day);
+  const firstDailyConditionRecord = asRecord(firstDailyDayRecord?.condition);
 
   const daily = fallback.daily.map((entry, index) =>
     normalizeDailyPoint(dailySource[index], entry, query.units),
@@ -402,6 +405,20 @@ function normalizeWeatherPayload(
       query.timezone,
       fallback.location.timezone,
     ) ?? fallback.location.timezone;
+  const liveCondition =
+    firstString(
+      pickValue(conditionRecord, ["text"]),
+      pickValue(currentRecord, ["condition", "weather", "status", "description"]),
+      pickValue(firstDailyConditionRecord, ["text"]),
+      pickValue(firstDailyDayRecord, ["condition", "summary"]),
+      pickValue(root, ["condition", "weather"]),
+    ) ?? "Current conditions";
+  const liveDescription =
+    firstString(
+      pickValue(currentRecord, ["description", "summary"]),
+      pickValue(root, ["summary", "ai_summary"]),
+      pickValue(firstDailyDayRecord, ["summary"]),
+    ) ?? "Live forecast feed active.";
 
   const report: WeatherReport = {
     source: "live",
@@ -451,17 +468,8 @@ function normalizeWeatherPayload(
             ? pickValue(currentRecord, ["feelslike_c", "apparent_temperature", "heat_index_c"])
             : pickValue(currentRecord, ["feelslike_f", "apparent_temperature", "heat_index_f"]),
         ) ?? fallback.current.apparentTemperature,
-      condition:
-        firstString(
-          pickValue(conditionRecord, ["text"]),
-          pickValue(currentRecord, ["condition", "weather", "status"]),
-          fallback.current.condition,
-        ) ?? fallback.current.condition,
-      description:
-        firstString(
-          pickValue(currentRecord, ["description", "summary"]),
-          fallback.current.description,
-        ) ?? fallback.current.description,
+      condition: liveCondition,
+      description: liveDescription,
       humidity:
         firstNumber(pickValue(currentRecord, ["humidity", "relative_humidity"])) ??
         fallback.current.humidity,
@@ -532,13 +540,13 @@ export async function getWeatherReport(query: WeatherQuery): Promise<WeatherRepo
       return {
         ...staleCached.report,
         source: "live",
-        sourceDetail: `${message}. Showing the latest cached live briefing instead of switching to demo data.`,
+        sourceDetail: `${message}. Showing the latest cached live briefing instead of switching to fallback data.`,
       };
     }
 
     return {
       ...fallback,
-      sourceDetail: `${message}. Falling back to seeded demo data so the dashboard stays fully interactive.`,
+      sourceDetail: `${message}. Showing fallback data to keep the dashboard available.`,
     };
   }
 }
