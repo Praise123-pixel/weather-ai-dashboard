@@ -273,6 +273,29 @@ export function WeatherDashboard({
     max: Math.max(...report.daily.map((day) => day.max)),
   };
 
+  const briefingFacts = [
+    {
+      label: "Data source",
+      value: report.source === "live" ? "Live Weather-AI" : "Demo fallback",
+      detail: "Server-side forecast feed",
+    },
+    {
+      label: "Forecast window",
+      value: `${query.days} days`,
+      detail: "Daily runway currently loaded",
+    },
+    {
+      label: "Timezone",
+      value: report.location.timezone,
+      detail: "Local context for the briefing",
+    },
+    {
+      label: "Narrative layer",
+      value: query.ai ? "AI enabled" : "AI paused",
+      detail: "Metrics remain live in both modes",
+    },
+  ];
+
   return (
     <main className={styles.shell}>
       <section className={styles.hero}>
@@ -292,81 +315,104 @@ export function WeatherDashboard({
         </div>
 
         <div className={styles.controlDeck}>
-          <div className={styles.controlPanel}>
-            <p className={styles.panelLabel}>Forecast controls</p>
+          <div className={styles.controlColumn}>
+            <div className={styles.controlPanel}>
+              <p className={styles.panelLabel}>Forecast controls</p>
 
-            <div className={styles.presetRow}>
-              {presets.map((preset) => {
-                const isActive = activePreset?.id === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`${styles.presetButton} ${isActive ? styles.presetButtonActive : ""}`}
-                    onClick={() => handlePreset(preset)}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
+              <div className={styles.presetRow}>
+                {presets.map((preset) => {
+                  const isActive = activePreset?.id === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`${styles.presetButton} ${isActive ? styles.presetButtonActive : ""}`}
+                      onClick={() => handlePreset(preset)}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className={styles.controlRow}>
+                <button
+                  type="button"
+                  className={`${styles.toggleButton} ${
+                    query.units === "metric" ? styles.toggleButtonActive : ""
+                  }`}
+                  onClick={() => handleUnits("metric")}
+                >
+                  Metric
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.toggleButton} ${
+                    query.units === "imperial" ? styles.toggleButtonActive : ""
+                  }`}
+                  onClick={() => handleUnits("imperial")}
+                >
+                  Imperial
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.toggleButton} ${query.ai ? styles.toggleButtonActive : ""}`}
+                  onClick={handleAiToggle}
+                >
+                  {query.ai ? "AI summary on" : "AI summary off"}
+                </button>
+                <button type="button" className={styles.ghostButton} onClick={handleUseMyLocation}>
+                  Use my location
+                </button>
+              </div>
+
+              <form className={styles.coordinateForm} onSubmit={handleCoordinateSubmit}>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Latitude</span>
+                  <input
+                    className={styles.input}
+                    inputMode="decimal"
+                    value={draft.lat}
+                    onChange={(event) => handleDraftChange("lat", event.target.value)}
+                  />
+                </label>
+
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>Longitude</span>
+                  <input
+                    className={styles.input}
+                    inputMode="decimal"
+                    value={draft.lon}
+                    onChange={(event) => handleDraftChange("lon", event.target.value)}
+                  />
+                </label>
+
+                <button type="submit" className={styles.submitButton}>
+                  Refresh briefing
+                </button>
+              </form>
             </div>
 
-            <div className={styles.controlRow}>
-              <button
-                type="button"
-                className={`${styles.toggleButton} ${
-                  query.units === "metric" ? styles.toggleButtonActive : ""
-                }`}
-                onClick={() => handleUnits("metric")}
-              >
-                Metric
-              </button>
-              <button
-                type="button"
-                className={`${styles.toggleButton} ${
-                  query.units === "imperial" ? styles.toggleButtonActive : ""
-                }`}
-                onClick={() => handleUnits("imperial")}
-              >
-                Imperial
-              </button>
-              <button
-                type="button"
-                className={`${styles.toggleButton} ${query.ai ? styles.toggleButtonActive : ""}`}
-                onClick={handleAiToggle}
-              >
-                {query.ai ? "AI summary on" : "AI summary off"}
-              </button>
-              <button type="button" className={styles.ghostButton} onClick={handleUseMyLocation}>
-                Use my location
-              </button>
+            <div className={styles.briefingPanel}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.panelLabel}>Briefing status</p>
+                  <p className={styles.sectionCaption}>
+                    A compact status strip so the command surface feels informative all the way through.
+                  </p>
+                </div>
+              </div>
+
+              <div className={styles.factGrid}>
+                {briefingFacts.map((fact) => (
+                  <div key={fact.label} className={styles.factCard}>
+                    <p className={styles.factLabel}>{fact.label}</p>
+                    <p className={styles.factValue}>{fact.value}</p>
+                    <p className={styles.factDetail}>{fact.detail}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-
-            <form className={styles.coordinateForm} onSubmit={handleCoordinateSubmit}>
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Latitude</span>
-                <input
-                  className={styles.input}
-                  inputMode="decimal"
-                  value={draft.lat}
-                  onChange={(event) => handleDraftChange("lat", event.target.value)}
-                />
-              </label>
-
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Longitude</span>
-                <input
-                  className={styles.input}
-                  inputMode="decimal"
-                  value={draft.lon}
-                  onChange={(event) => handleDraftChange("lon", event.target.value)}
-                />
-              </label>
-
-              <button type="submit" className={styles.submitButton}>
-                Refresh briefing
-              </button>
-            </form>
           </div>
 
           <div className={styles.overviewPanel}>

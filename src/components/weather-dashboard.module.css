@@ -86,8 +86,14 @@
   margin-top: 30px;
 }
 
+.controlColumn {
+  display: grid;
+  gap: 16px;
+}
+
 .controlPanel,
-.overviewPanel {
+.overviewPanel,
+.briefingPanel {
   border-radius: 28px;
   padding: 22px;
   background: rgba(5, 13, 29, 0.34);
@@ -272,6 +278,41 @@
   margin-top: 18px;
 }
 
+.factGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.factCard {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.factLabel {
+  color: rgba(224, 236, 252, 0.7);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.factValue {
+  margin-top: 10px;
+  color: rgba(247, 251, 255, 0.96);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.factDetail {
+  margin-top: 6px;
+  color: rgba(224, 236, 252, 0.7);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .metricCard {
   padding: 16px;
   border-radius: 20px;
@@ -289,6 +330,7 @@
   margin-top: 10px;
   font-size: 1.6rem;
   font-weight: 700;
+  color: rgba(244, 249, 255, 0.96);
 }
 
 .metricDetail {
@@ -525,6 +567,10 @@
     grid-template-columns: 1fr;
   }
 
+  .factGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .submitButton {
     width: 100%;
   }
@@ -557,6 +603,7 @@
   }
 
   .metricGrid,
+  .factGrid,
   .highlightsGrid,
   .hourlyGrid {
     grid-template-columns: 1fr 1fr;
