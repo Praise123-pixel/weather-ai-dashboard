@@ -108,6 +108,51 @@
   text-transform: uppercase;
 }
 
+.searchBlock {
+  margin-top: 16px;
+}
+
+.searchResults {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.searchResultButton {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(247, 251, 255, 0.94);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.searchResultButton:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(140, 233, 219, 0.34);
+}
+
+.searchResultMeta {
+  color: rgba(221, 234, 250, 0.68);
+  font-size: 0.88rem;
+}
+
+.searchEmpty {
+  margin-top: 12px;
+  color: rgba(221, 234, 250, 0.68);
+  font-size: 0.9rem;
+}
+
 .presetRow {
   display: flex;
   flex-wrap: wrap;
@@ -252,6 +297,47 @@
   margin-top: 12px;
   color: rgba(226, 237, 250, 0.78);
   line-height: 1.65;
+}
+
+.headsUpCard {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.headsUpHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.headsUpTone {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(129, 228, 214, 0.16);
+  color: rgba(233, 245, 255, 0.9);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.headsUpBody {
+  margin-top: 10px;
+  color: rgba(244, 249, 255, 0.96);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.headsUpMeta {
+  margin-top: 6px;
+  color: rgba(223, 235, 251, 0.72);
+  font-size: 0.9rem;
 }
 
 .status {
