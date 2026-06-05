@@ -1,7 +1,9 @@
 :root {
   --background:
+    radial-gradient(circle at 18% 18%, rgba(173, 223, 238, 0.18), transparent 26%),
+    radial-gradient(circle at 82% 10%, rgba(179, 240, 212, 0.12), transparent 24%),
     radial-gradient(circle at top, rgba(255, 213, 137, 0.25), transparent 28%),
-    linear-gradient(180deg, #e6f1f8 0%, #f4f7fb 48%, #eef2f7 100%);
+    linear-gradient(180deg, #e8f3fa 0%, #f4f8fb 48%, #eef3f8 100%);
   --foreground: #102541;
   --surface: rgba(255, 255, 255, 0.72);
 }
